@@ -13,6 +13,7 @@ Helper files for running experiments on measure equivariance of neural networks 
 - `/models` (File per model, i.e. `ResNet50.py`, `ViT.py`, etc.)
 
 `/transform`
+
 `/transform/diffeos`
 - `diffeo.py`
 - `inverse.py`
@@ -30,6 +31,7 @@ class Diffeo
 ```
 
 `/transform/whitenoise`
+
 `/transform/corruptedlabels`
 
 `/representationLearning`
