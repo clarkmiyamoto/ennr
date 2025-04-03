@@ -37,5 +37,20 @@ class Diffeo
 - `for_endtoend.py` (visulaizations / metrics for end to end comparisons)
 
 
+# Front-End Workflow
+## Inspecting Invariance
+1. Pick a bunch of models using `model_wrappers/load.py`
+2. Pick an ensemble of diffeos using `/diffeos/diffeo.py`
+3. Run metric using `/metrics`
+
+## Learning Equivariance
+1. Pick a model using `model_wrappers/load.py`
+2. Pick an ensemble of diffeos using `/diffeos/diffeo.py`
+3. Learn to activation steer using `/representationLearning` & model pikced in (1)
+4. Run metric using `/metrics`
+
+## Noise vs Mislabeling
+I need to create my own data structure for noise $\eta$ and misslabeling $\eta$
+
 
 
