@@ -12,7 +12,8 @@ Helper files for running experiments on measure equivariance of neural networks 
     - `steering_g_naive(AB: diffeo_param, i, j)`: Does activation steering w/ diffeo ONLY
 - `/models` (File per model, i.e. `ResNet50.py`, `ViT.py`, etc.)
 
-`/diffeos`
+`/transform`
+`/transform/diffeos`
 - `diffeo.py`
 - `inverse.py`
 - `generation.py`
@@ -27,6 +28,9 @@ class Diffeo
   @static_method
   def load()
 ```
+
+`/transform/whitenoise`
+`/transform/corruptedlabels`
 
 `/representationLearning`
 - ...
