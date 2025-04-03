@@ -50,7 +50,7 @@ class Diffeo
 4. Run metric using `/metrics`
 
 ## Noise vs Mislabeling
-I need to create my own data structure for noise $\eta$ and misslabeling $\eta$
+I need to create my own data structure for noise $\epsilon$ and misslabeling $\eta$
 
 
 
