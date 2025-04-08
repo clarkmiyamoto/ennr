@@ -69,9 +69,9 @@ class BiasNetwork(nn.Module):
 
 
 def find_param_inverse(AB: t.Tensor, 
-                       extra_freq_scaling = 5, 
+                       extra_freq_scaling = 1, 
                        num_epochs = 500,
-                       resolution = 384, 
+                       resolution = 224, 
                        device = t.device('cpu'),
                        disable_tqdm_log = True) -> t.Tensor:
   '''

@@ -7,26 +7,26 @@ import math
 
 def band_limited_sparse_transform_amplitude(x_range: list, 
                                             y_range: list, 
-                                            num_of_terms: int, 
+                                            num_nonzero_params: int, 
                                             diffeo_amp = 1, 
                                             rng = None, 
                                             seed = 37, 
-                                            num_of_diffeo = 1, 
+                                            num_diffeo_per_amp = 1, 
                                             alpha = None) -> tuple[t.Tensor, t.Tensor]:
   '''
     Arguments:
       - x_range: the range of x frequency
       - y_range: the range of y frequency
-      - num_of_terms: number of non-zero entries in the A,B matrix
+      - num_nonzero_params: number of non-zero entries in the A,B matrix
       - diffeo_amp: the sum of the absolute value of the diffeo coefficient
       - rng: a rng used to shuffle
       - seed: if no rng is provided we use the seed to seed generation
-      - num_of_diffeo: number of diffeos to generate
+      - num_diffeo_per_amp: number of diffeos to generate
       - alpha: the Dirichlet distribution 'tilt'
     Returns A,B: 
-      - A (torch.tensor): Has shape (num_of_diffeo, x_range[-1], y_range[-1]), 
+      - A (torch.tensor): Has shape (num_diffeo_per_amp, x_range[-1], y_range[-1]), 
         parameterizes diffeo coefficient for x-distortion
-      - B (torch.tensor): Has shape (num_of_diffeo, x_range[-1], y_range[-1]), 
+      - B (torch.tensor): Has shape (num_diffeo_per_amp, x_range[-1], y_range[-1]), 
         parameterizes diffeo coefficient for y-distortion
   
   '''
@@ -39,23 +39,23 @@ def band_limited_sparse_transform_amplitude(x_range: list,
                 if i >= x_range[0] or j >= y_range[0]]
   index_bank = np.array(index_bank)
 
-  for _ in range(num_of_diffeo):
+  for _ in range(num_diffeo_per_amp):
     A_empty = np.zeros((x_range[-1], y_range[-1]))
     B_empty = np.zeros((x_range[-1], y_range[-1]))
 
-    A_sign = (rng.integers(2, size = num_of_terms) - 0.5) * 2
-    B_sign = (rng.integers(2, size = num_of_terms) - 0.5) * 2
+    A_sign = (rng.integers(2, size = num_nonzero_params) - 0.5) * 2
+    B_sign = (rng.integers(2, size = num_nonzero_params) - 0.5) * 2
 
     if alpha == None:
-      A_nm = diffeo_amp * rng.dirichlet(np.ones(num_of_terms)) * A_sign
-      B_nm = diffeo_amp * rng.dirichlet(np.ones(num_of_terms)) * B_sign
+      A_nm = diffeo_amp * rng.dirichlet(np.ones(num_nonzero_params)) * A_sign
+      B_nm = diffeo_amp * rng.dirichlet(np.ones(num_nonzero_params)) * B_sign
     elif alpha != None:
-      A_nm = diffeo_amp * rng.dirichlet(alpha * np.ones(num_of_terms)) * A_sign
-      B_nm = diffeo_amp * rng.dirichlet(alpha * np.ones(num_of_terms)) * B_sign
+      A_nm = diffeo_amp * rng.dirichlet(alpha * np.ones(num_nonzero_params)) * A_sign
+      B_nm = diffeo_amp * rng.dirichlet(alpha * np.ones(num_nonzero_params)) * B_sign
     
     
     index_list = [index_bank[i] for i in rng.choice(range(len(index_bank)),
-                                                    num_of_terms, 
+                                                    num_nonzero_params, 
                                                     replace=False)]
 
     for i, index in enumerate(index_list):
@@ -63,7 +63,7 @@ def band_limited_sparse_transform_amplitude(x_range: list,
       A_empty[x_index, y_index] = A_nm[i]
 
     index_list = [index_bank[i] for i in rng.choice(range(len(index_bank)),
-                                                    num_of_terms, 
+                                                    num_nonzero_params, 
                                                     replace=False)]
 
     for i, index in enumerate(index_list):

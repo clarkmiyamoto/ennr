@@ -8,22 +8,33 @@ from inverse import compose_diffeo_from_left
 
 @dataclass
 class DiffeoConfig:
-    """Configuration for diffeomorphism parameters"""
+    """
+    Configuration for sampling diffeomorphism parameters
+      resolution: grid resolution for diffeo
+      x/y_range: the range of x/y frequency we sample from
+      num_nonzero_params: the sparsity of the parameter matrix
+      diffeo_amp: a list of amplitude we want to sample from
+      num_diffeo_per_amp: how many diffeo to sample from a particular amplitude
+      seed: numpy dirichlet distribution sampling seed
+      alpha: controls the dirichlet distribution 'tilt'
+    """
     resolution: int = 224
     x_range: list[int] = field(default_factory=lambda: [0, 3])
     y_range: list[int] = field(default_factory=lambda: [0, 3])
     num_nonzero_params: int = 3
-    strength: list[float] = field(default_factory=lambda: [0.1])
-    num_diffeo_per_strength: int = 10
+    diffeo_amps: list[float] = field(default_factory=lambda: [0.1])
+    num_diffeo_per_amp: int = 10
+    seed: int = 37
+    alpha: list[float] = None
 
 
 def read_diffeo_from_path(path: str, device = t.device("cpu")):
    diffeo_param_dict = t.load(path, weights_only=False, map_location = device)
    diffeo_param = diffeo_param_dict['AB']
    inv_diffeo_param = diffeo_param_dict['inv_AB']
-   diffeo_strenghts = diffeo_param_dict['diffeo_config']['strength']
-   num_of_diffeo_per_strength = diffeo_param_dict['diffeo_config']['num_diffeo_per_strength']
-   return diffeo_param, inv_diffeo_param, diffeo_strenghts, num_of_diffeo_per_strength
+   diffeo_strenghts = diffeo_param_dict['diffeo_config']['diffeo_amp']
+   num_of_diffeo_per_amp = diffeo_param_dict['diffeo_config']['num_diffeo_per_amp']
+   return diffeo_param, inv_diffeo_param, diffeo_strenghts, num_of_diffeo_per_amp
 
 class DiffeoGrids(torch.Tensor):
   """ a class to store diffeo grids, mostly for readability  """
@@ -66,7 +77,7 @@ class DiffeoContainer:
     self._device = device
     self.to(device)
 
-    self.initialize_diffeo_config(diffeo_config)
+    self._initialize_diffeo_config(diffeo_config)
 
   @property
   def x_res(self): return self._x_res
@@ -81,14 +92,31 @@ class DiffeoContainer:
       length += len(diffeo)
     return length
   
-  def initialize_diffeo_config(diffeo_config: DiffeoConfig):
+  def _initialize_diffeo_config(self, diffeo_config: DiffeoConfig):
     if diffeo_config is None: pass
-
+    arguments = diffeo_config.__dict__.copy()
+    res = arguments.pop('resolution')
+    self.x_res = res
+    self.y_res = res
+    params = []
+    strength_list = arguments.pop('diffeo_amps')
+    for strength in strength_list:
+      A, B = band_limited_sparse_transform_amplitude(diffeo_amp=strength, **arguments)
+      params.append(torch.cat([A,B], dim = -1))
+    self.diffeo_params = torch.stack(params, dim = 0)
+    self.diffeos = self.get_grid_from_param(self.x_res, self.y_res, self.diffeo_params)
     pass
   
   @staticmethod
-  def _generate_diffeo(diffeo_config):
-    pass
+  def get_grid_from_param(x_res, y_res, params):
+    '''assume param have shape [strength, counts, x, y, 2]'''
+    diffeos = []
+    for param in params:
+      A = param[..., 0]
+      B = param[..., 1]
+      diffeos.append(get_diffeo_grid_sample(x_res, y_res, A, B))
+    return diffeos
+
   
   def __getitem__(self, index):
     if isinstance(index, int): return self.diffeos[index]
@@ -128,14 +156,9 @@ class DiffeoContainer:
     for children in self.resampled.values(): children.to(device)
     if type(self.inverse) == type(DiffeoContainer): self.inverse.to(device)
   
-  def get_id_grid(self, x_res = None, y_res = None):
-    if x_res == None: x_res = self.x_res
-    if y_res == None: y_res = self.y_res
-    id_grid = get_id_grid(x_res, y_res).to(self.device)
-    return id_grid    
 
   def up_down_sample(self, new_x_res, new_y_res, mode = 'bilinear', align_corners = False):
-    id_grid = self.get_id_grid(x_res = new_x_res, y_res = new_y_res).to(self.device)
+    id_grid = get_id_grid(x_res = new_x_res, y_res = new_y_res).to(self.device)
     new_diffeo = []
     for diffeos in self.diffeos:
       new_diffeo.append(compose_diffeo_from_left(id_grid.repeat(len(diffeos), 1, 1, 1), diffeos, mode = mode, align_corners = align_corners))
@@ -157,83 +180,3 @@ class DiffeoContainer:
       self._find_inverse_loss.append({'loss': lost_hist, 'stopping_epoch': epoch_num, 'lr': lr})
     self.inverse = DiffeoContainer(self.x_res, self.y_res, diffeos=inverse, device = self.device)
     return self.inverse
-
-
-
-class SparseDiffeoContainer(DiffeoContainer):
-  '''
-    Container for sparse diffeomorphism transformations, inheriting from DiffeoContainer.
-    Args:
-      x_res: X-dimension resolution
-      y_res: Y-dimension resolution
-      A, B: lists of transformation coefficients (optional)
-      diffeos: list of diffeomorphisms (optional)
-      rng: Random number generator
-      seed: Random seed when rng is None
-      device: PyTorch device
-    Methods handle:
-    - Sparse coefficient generation with amplitude control
-    - Grid creation from A,B coefficients
-    - Composition of transformations at different levels
-    - Memory management for grids
-    - Child container tracking for compositions
-    Notes:
-    - Uses sparse_transform_amplitude for coefficient generation
-    - Maintains transformation parameters history
-    - Allows clearing of computed grids to manage memory
-  '''
-  def __init__(self, x_res: int, y_res: int, A = None, B = None, diffeos = None, rng = None, seed = 37, device = t.device('cpu')):
-    super().__init__(x_res, y_res, diffeos, device)
-    if rng == None:
-      self.rng = 'default with seed=37'
-      self._rng = np.random.default_rng(seed = seed)
-    else: 
-      self.rng = 'passed in'
-      self._rng = self.rng
-    self.A = A
-    self.B = B
-    if A == None: self.A = []
-    if B == None: self.B = []
-    self.diffeo_params = []
-    self.children = []
-
-  def sparse_AB_append(self, 
-                       x_range, 
-                       y_range, 
-                       num_of_terms, 
-                       diffeo_amp, 
-                       num_of_diffeo, 
-                       rng = None, 
-                       seed = 37, 
-                       alpha = None):
-    
-    if rng == 'self': rng = self._rng
-    
-    self.diffeo_params.append({'x_range': x_range, 
-                               'y_range': y_range, 
-                               'num_of_diffeo':num_of_diffeo, 
-                               'diffeo_amp':diffeo_amp, 
-                               'num_of_terms': num_of_terms, 
-                               'rng':rng, 
-                               'seed':seed, 
-                               'alpha':alpha})
-    
-    A_nm, B_nm = band_limited_sparse_transform_amplitude(**self.diffeo_params[-1])
-    
-    self.A.append(A_nm)
-    self.B.append(B_nm)
-  
-  def get_all_grid(self):
-    for A, B in zip(self.A, self.B):
-      self.diffeos.append(get_diffeo_grid_sample(self.x_res, self.y_res, A, B))
-    
-  def clear_all_grid(self):
-    self.diffeos = []
-
-  def get_composition(self, level = 1):
-    new_container = diffeo_compose_container(self, level = level)
-    if new_container in self.children: self.children.remove(new_container)
-    self.children.append(new_container)
-    return self.children[-1]
-
-
